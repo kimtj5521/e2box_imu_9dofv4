@@ -6,6 +6,7 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <fstream>
 
 using namespace std;
 
@@ -14,6 +15,10 @@ e2box_imu_9dofv4 m_e2box_imu;
 ros::Publisher imu_pub;
 //std_msgs::Float64MultiArray imu_data;
 sensor_msgs::Imu imu_data;
+sensor_msgs::Imu imu_data_temp;
+sensor_msgs::Imu imu_data_prev;
+
+//ofstream outFile("data_output.txt");
 
 int m_iImuIndex;
 
@@ -35,9 +40,18 @@ void OnReceiveImu(void)
     }
 }
 
+double gap_ang_vel_x = 0.0;
+double gap_ang_vel_y = 0.0;
+double gap_ang_vel_z = 0.0;
+double gap_acc_x = 0.0;
+double gap_acc_y = 0.0;
+double gap_acc_z = 0.0;
+
 void publishImuData(void)
-{    
+{
+
     if(!m_e2box_imu.data_acquisition){
+
         imu_data.header.seq = m_e2box_imu.m_dwordCounterChecksumPass;
         imu_data.header.stamp = ros::Time::now();
         imu_data.header.frame_id = "imu_link";
@@ -48,6 +62,61 @@ void publishImuData(void)
         imu_data.orientation.z = m_e2box_imu.m_dQuaternion[0];
         imu_data.orientation.w = m_e2box_imu.m_dQuaternion[3];
 
+        // imu_data_temp
+        imu_data_temp.angular_velocity.x = m_e2box_imu.m_dAngRate[0]*M_PI/180.0;
+        imu_data_temp.angular_velocity.y = m_e2box_imu.m_dAngRate[1]*M_PI/180.0;
+        imu_data_temp.angular_velocity.z = m_e2box_imu.m_dAngRate[2]*M_PI/180.0;
+
+        imu_data_temp.linear_acceleration.x = m_e2box_imu.m_dAccel[0]*9.80665;
+        imu_data_temp.linear_acceleration.y = m_e2box_imu.m_dAccel[1]*9.80665;
+        imu_data_temp.linear_acceleration.z = m_e2box_imu.m_dAccel[2]*9.80665;
+
+        // imu_data_prev
+        imu_data_prev.angular_velocity.x = imu_data_temp.angular_velocity.x;
+        imu_data_prev.angular_velocity.y = imu_data_temp.angular_velocity.y;
+        imu_data_prev.angular_velocity.z = imu_data_temp.angular_velocity.z;
+
+        imu_data_prev.linear_acceleration.x = imu_data_temp.linear_acceleration.x;
+        imu_data_prev.linear_acceleration.y = imu_data_temp.linear_acceleration.y;
+        imu_data_prev.linear_acceleration.z = imu_data_temp.linear_acceleration.z;
+
+        // imu_data
+        gap_ang_vel_x = fabs(imu_data_prev.angular_velocity.x - imu_data_temp.angular_velocity.x);
+        if(gap_ang_vel_x > 0.3){
+            imu_data_temp.angular_velocity.x = imu_data_prev.angular_velocity.x;
+        }
+        gap_ang_vel_y = fabs(imu_data_prev.angular_velocity.y - imu_data_temp.angular_velocity.y);
+        if(gap_ang_vel_y > 0.3){
+            imu_data_temp.angular_velocity.y = imu_data_prev.angular_velocity.y;
+        }
+        gap_ang_vel_z = fabs(imu_data_prev.angular_velocity.z - imu_data_temp.angular_velocity.z);
+        if(gap_ang_vel_z > 0.3){
+            imu_data_temp.angular_velocity.z = imu_data_prev.angular_velocity.z;
+        }
+
+        imu_data.angular_velocity.x = (imu_data_temp.angular_velocity.x + imu_data_prev.angular_velocity.x) / 2.0;
+        imu_data.angular_velocity.y = (imu_data_temp.angular_velocity.y + imu_data_prev.angular_velocity.y) / 2.0;
+        imu_data.angular_velocity.z = (imu_data_temp.angular_velocity.z + imu_data_prev.angular_velocity.z) / 2.0;
+
+        gap_acc_x = fabs(imu_data_prev.linear_acceleration.x - imu_data_temp.linear_acceleration.x);
+        if(gap_acc_x > 2.0){
+            imu_data_temp.linear_acceleration.x = imu_data_prev.linear_acceleration.x;
+        }
+        gap_acc_y = fabs(imu_data_prev.linear_acceleration.y - imu_data_temp.linear_acceleration.y);
+        if(gap_acc_y > 2.0){
+            imu_data_temp.linear_acceleration.y = imu_data_prev.linear_acceleration.y;
+        }
+        gap_acc_z = fabs(imu_data_prev.linear_acceleration.z - imu_data_temp.linear_acceleration.z);
+        if(gap_acc_z > 2.0){
+            imu_data_temp.linear_acceleration.z = imu_data_prev.linear_acceleration.z;
+        }
+
+        imu_data.linear_acceleration.x = (imu_data_temp.linear_acceleration.x + imu_data_prev.linear_acceleration.x) / 2.0;
+        imu_data.linear_acceleration.y = (imu_data_temp.linear_acceleration.y + imu_data_prev.linear_acceleration.y) / 2.0;
+        imu_data.linear_acceleration.z = (imu_data_temp.linear_acceleration.z + imu_data_prev.linear_acceleration.z) / 2.0;
+
+        /////
+        /*
         imu_data.angular_velocity.x = m_e2box_imu.m_dAngRate[0]*M_PI/180.0;
         imu_data.angular_velocity.y = m_e2box_imu.m_dAngRate[1]*M_PI/180.0;
         imu_data.angular_velocity.z = m_e2box_imu.m_dAngRate[2]*M_PI/180.0;
@@ -55,6 +124,11 @@ void publishImuData(void)
         imu_data.linear_acceleration.x = m_e2box_imu.m_dAccel[0]*9.80665;
         imu_data.linear_acceleration.y = m_e2box_imu.m_dAccel[1]*9.80665;
         imu_data.linear_acceleration.z = m_e2box_imu.m_dAccel[2]*9.80665;
+        */
+        /////
+
+        //outFile << imu_data.linear_acceleration.x << "\t" << imu_data.linear_acceleration.y << "\t" << imu_data.linear_acceleration.z << "\t" <<
+        //           imu_data.angular_velocity.x << "\t" << imu_data.angular_velocity.y << "\t" << imu_data.angular_velocity.z << endl;
 
         imu_pub.publish(imu_data);
     }
